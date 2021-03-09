@@ -38,7 +38,7 @@ ISR(PCINT0_vect)
     if (last_channel_2_state == 1 && !(PINB & B00000010))
     {
         last_channel_2_state = 0;
-        receiver_input_channel_2 = micros() - timer_channel_2
+        receiver_input_channel_2 = micros() - timer_channel_2;
     }
     // Channel 3 (pin 10) ==================================
     if (last_channel_3_state == 0 && PINB & B00000100)
@@ -68,39 +68,27 @@ ISR(PCINT0_vect)
 void read_receiver_signals()
 {
     Serial.print("Channel 1:");
-    if (receiver_input_channel_1 - 1480 < 0)
-        Serial.print("<<<");
-    else if (receiver_input_channel_1 - 1520 > 0)
-        Serial.print(">>>");
-    else
-        Serial.print("-+-");
+    if (receiver_input_channel_1 - 1480 < 0) Serial.print("<<<");
+    else if (receiver_input_channel_1 - 1520 > 0) Serial.print(">>>");
+    else Serial.print("-+-");
     Serial.print(receiver_input_channel_1);
 
     Serial.print("  Channel 2:");
-    if (receiver_input_channel_2 - 1480 < 0)
-        Serial.print("^^^");
-    else if (receiver_input_channel_2 - 1520 > 0)
-        Serial.print("vvv");
-    else
-        Serial.print("-+-");
+    if (receiver_input_channel_2 - 1480 < 0) Serial.print("^^^");
+    else if (receiver_input_channel_2 - 1520 > 0) Serial.print("vvv");
+    else Serial.print("-+-");
     Serial.print(receiver_input_channel_2);
 
     Serial.print("  Channel 3:");
-    if (receiver_input_channel_3 - 1480 < 0)
-        Serial.print("vvv");
-    else if (receiver_input_channel_3 - 1520 > 0)
-        Serial.print("^^^");
-    else
-        Serial.print("-+-");
+    if (receiver_input_channel_3 - 1480 < 0) Serial.print("vvv");
+    else if (receiver_input_channel_3 - 1520 > 0) Serial.print("^^^");
+    else Serial.print("-+-");
     Serial.print(receiver_input_channel_3);
 
     Serial.print("  Channel 4:");
-    if (receiver_input_channel_4 - 1480 < 0)
-        Serial.print("<<<");
-    else if (receiver_input_channel_4 - 1520 > 0)
-        Serial.print(">>>");
-    else
-        Serial.print("-+-");
+    if (receiver_input_channel_4 - 1480 < 0) Serial.print("<<<");
+    else if (receiver_input_channel_4 - 1520 > 0) Serial.print(">>>");
+    else Serial.print("-+-");
     Serial.println(receiver_input_channel_4);
 }
 
@@ -115,10 +103,10 @@ void setup()
     Serial.begin(115200);
 
     motor_left.attach(9, RC_min[1], RC_max[1]);
-    motor_right.attach(10, RC_min[1], RC_max[1]);
+    motor_right.attach(10, RC_min[2], RC_max[2]);
 
     toggle_left.attach(8, RC_min[0], RC_max[0]);
-    toggle_right.attach(11, RC_min[2], RC_max[2]);
+    toggle_right.attach(11, RC_min[3], RC_max[3]);
 }
 
 void loop()
