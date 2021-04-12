@@ -1,6 +1,6 @@
 #include <Servo.h>
 
-#define READ_PWM 0
+#define PRINT_PWM 0
 
 // Calibrated pulse width for FrSky Taranis Q X7 16CH 2.4Ghz transmitter with RX8R receiver
 const uint16_t RC_min[4] = {1000, 1000, 1000, 1000};
@@ -130,7 +130,7 @@ void loop()
         motor_right.writeMicroseconds(receiver_input_channel_3);
         last_rc_update = millis();
 
-        if (READ_PWM)
+        if (PRINT_PWM)
         {
             read_receiver_signals();
             delay(250);
