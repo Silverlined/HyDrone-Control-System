@@ -1,7 +1,16 @@
 #include <Servo.h>
+#include <SparkFunLSM6DS3.h>
+#include <Wire.h>
 
 #define PRINT_PWM 1
 #define LED 13
+
+// IMU config
+LSM6DS3 imu_sensor(I2C_MODE, 0x6B);
+
+uint16_t init_time;
+const uint16_t TIME_STEP_MICROS = 10000; // 10 ms period -> 100 Hz sampling rate.
+unsigned long previousTime = 0;
 
 // Calibrated pulse width for FrSky Taranis Q X7 16CH 2.4Ghz transmitter with RX8R receiver
 const uint16_t RC_min[4] = {1000, 1000, 1000, 1000};
@@ -67,7 +76,7 @@ ISR(PCINT0_vect)
 
 //Subroutine for displaying the receiver signals
 //Subroutine for displaying the receiver signals
-void read_receiver_signals()
+void readReceiverSignals()
 {
   Serial.print("Channel 1:");
   if (receiver_input_channel_1 - 1480 < 0)
@@ -106,15 +115,39 @@ void read_receiver_signals()
   Serial.println(receiver_input_channel_4);
 }
 
-void step_input()
+void inputStep()
 {
   long end_time = micros() + 5000000;
   while (end_time > micros())
   {
-    // Begin Step input
+    /// Begin Step input
     motor_left.writeMicroseconds(1550);
     motor_right.writeMicroseconds(1450);
-    // Collect IMU data
+
+    /// Collect IMU data
+    getData();
+  }
+}
+
+void getData()
+{
+  //millis() is not suitable for precise timing as it has a lot of jitter
+  if (micros() - previousTime > TIME_STEP_MICROS)
+  {
+    previousTime = micros();
+    Serial.print(F("Data:"));
+    Serial.print(imu_sensor.readFloatAccelX(), 4);
+    Serial.print(",");
+    Serial.print(imu_sensor.readFloatAccelY(), 4);
+    Serial.print(",");
+    Serial.print(imu_sensor.readFloatAccelZ(), 4);
+    Serial.print(",");
+    Serial.print(imu_sensor.readFloatGyroX(), 4);
+    Serial.print(",");
+    Serial.print(imu_sensor.readFloatGyroY(), 4);
+    Serial.print(",");
+    Serial.print(imu_sensor.readFloatGyroZ(), 4);
+    Serial.println("");
   }
 }
 
@@ -127,10 +160,29 @@ void setup()
   PCMSK0 |= (1 << PCINT2); // set PCINT0 (digital pin 10) to trigger an interrupt on state change
   PCMSK0 |= (1 << PCINT3); // set PCINT0 (digital pin 11) to trigger an interrupt on state change
 
+  Serial.begin(115200);
+
+  // Accelerometer Config
+  imu_sensor.settings.accelEnabled = 1;
+  imu_sensor.settings.accelRange = 2;        //Max G force readable.  Can be: 2, 4, 8, 16
+  imu_sensor.settings.accelSampleRate = 104; //Hz.  Can be: 13, 26, 52, 104, 208, 416, 833, 1666, 3332, 6664, 13330
+  imu_sensor.settings.accelBandWidth = 50;   //Hz.  Can be: 50, 100, 200, 400;
+  imu_sensor.settings.accelFifoEnabled = 0;
+
+  // Gyro Config
+  imu_sensor.settings.gyroEnabled = 1;
+  imu_sensor.settings.gyroRange = 125;      // [dps].  Can be: 125, 245, 500, 1000, 2000
+  imu_sensor.settings.gyroSampleRate = 104; // [Hz].  Can be: 13, 26, 52, 104, 208, 416, 833, 1666
+  imu_sensor.settings.gyroFifoEnabled = 0;
+
+  // Temp
+  imu_sensor.settings.tempEnabled = 0;
+
   motor_left.attach(5, RC_min[1], RC_max[1]);
   motor_right.attach(6, RC_min[2], RC_max[2]);
 
-  Serial.begin(115200);
+  init_time = micros();
+  delay(500);
 }
 
 void loop()
@@ -143,13 +195,13 @@ void loop()
 
     if (PRINT_PWM)
     {
-      read_receiver_signals();
+      readReceiverSignals();
       delay(250);
     }
 
     if (receiver_input_channel_3 > 1520)
     {
-      step_input();
+      inputStep();
     }
   }
 }
