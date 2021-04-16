@@ -2,11 +2,18 @@
 #include <SparkFunLSM6DS3.h>
 #include <Wire.h>
 
-#define PRINT_PWM 1
+#define UPPER_THRESHOLD 1520
+#define LOWER_THRESHOLD 1480
+#define PRINT_PWM 0
 #define LED 13
 
+int test = 1;
 // IMU config
 LSM6DS3 imu_sensor(I2C_MODE, 0x6B);
+//const float GYRO_CALIBRATION[3] = {0, 0, 0};
+//const float ACCEL_CALIBRATION[3] = {0, 0, 0};
+const float GYRO_CALIBRATION[3] = {0.06, -0.006, -0.265};
+const float ACCEL_CALIBRATION[3] = {0.005, 0.001, 0.124};
 
 uint16_t init_time;
 const uint16_t TIME_STEP_MICROS = 10000; // 10 ms period -> 100 Hz sampling rate.
@@ -79,36 +86,36 @@ ISR(PCINT0_vect)
 void readReceiverSignals()
 {
   Serial.print("Channel 1:");
-  if (receiver_input_channel_1 - 1480 < 0)
+  if (receiver_input_channel_1 - LOWER_THRESHOLD < 0)
     Serial.print("<<<");
-  else if (receiver_input_channel_1 - 1520 > 0)
+  else if (receiver_input_channel_1 - UPPER_THRESHOLD > 0)
     Serial.print(">>>");
   else
     Serial.print("-+-");
   Serial.print(receiver_input_channel_1);
 
   Serial.print("  Channel 2:");
-  if (receiver_input_channel_2 - 1480 < 0)
+  if (receiver_input_channel_2 - LOWER_THRESHOLD < 0)
     Serial.print("^^^");
-  else if (receiver_input_channel_2 - 1520 > 0)
+  else if (receiver_input_channel_2 - UPPER_THRESHOLD > 0)
     Serial.print("vvv");
   else
     Serial.print("-+-");
   Serial.print(receiver_input_channel_2);
 
   Serial.print("  Channel 3:");
-  if (receiver_input_channel_3 - 1480 < 0)
+  if (receiver_input_channel_3 - LOWER_THRESHOLD < 0)
     Serial.print("vvv");
-  else if (receiver_input_channel_3 - 1520 > 0)
+  else if (receiver_input_channel_3 - UPPER_THRESHOLD > 0)
     Serial.print("^^^");
   else
     Serial.print("-+-");
   Serial.print(receiver_input_channel_3);
 
   Serial.print("  Channel 4:");
-  if (receiver_input_channel_4 - 1480 < 0)
+  if (receiver_input_channel_4 - LOWER_THRESHOLD < 0)
     Serial.print("<<<");
-  else if (receiver_input_channel_4 - 1520 > 0)
+  else if (receiver_input_channel_4 - UPPER_THRESHOLD > 0)
     Serial.print(">>>");
   else
     Serial.print("-+-");
@@ -117,38 +124,44 @@ void readReceiverSignals()
 
 void inputStep()
 {
-  long end_time = micros() + 5000000;
-  while (end_time > micros())
+  long _timer_5s = micros() + 5000000;
+  Serial.print(F("Begin"));
+  Serial.println("");
+  while (_timer_5s > micros())
   {
     /// Begin Step input
     motor_left.writeMicroseconds(1550);
     motor_right.writeMicroseconds(1450);
 
-    /// Collect IMU data
-    getData();
+    /// Collect IMU data, disable pin change interrupts
+    if (micros() - previousTime > TIME_STEP_MICROS)
+    {
+      getData();
+    }
   }
+  Serial.print(F("Stop"));
+  Serial.println("");
 }
 
 void getData()
 {
   //millis() is not suitable for precise timing as it has a lot of jitter
-  if (micros() - previousTime > TIME_STEP_MICROS)
-  {
-    previousTime = micros();
-    Serial.print(F("Data:"));
-    Serial.print(imu_sensor.readFloatAccelX(), 4);
-    Serial.print(",");
-    Serial.print(imu_sensor.readFloatAccelY(), 4);
-    Serial.print(",");
-    Serial.print(imu_sensor.readFloatAccelZ(), 4);
-    Serial.print(",");
-    Serial.print(imu_sensor.readFloatGyroX(), 4);
-    Serial.print(",");
-    Serial.print(imu_sensor.readFloatGyroY(), 4);
-    Serial.print(",");
-    Serial.print(imu_sensor.readFloatGyroZ(), 4);
-    Serial.println("");
-  }
+  previousTime = micros();
+  PCICR &= ~(1 << PCIE0);   /// Disable Pin Change Interrupts
+  Serial.print(F("Data:"));
+  Serial.print(imu_sensor.readFloatAccelX() - ACCEL_CALIBRATION[0], 4);
+  Serial.print(",");
+  Serial.print(imu_sensor.readFloatAccelY() - ACCEL_CALIBRATION[1], 4);
+  Serial.print(",");
+  Serial.print(imu_sensor.readFloatAccelZ() - ACCEL_CALIBRATION[2], 4);
+  Serial.print(",");
+  Serial.print(imu_sensor.readFloatGyroX() - GYRO_CALIBRATION[0], 4);
+  Serial.print(",");
+  Serial.print(imu_sensor.readFloatGyroY() - GYRO_CALIBRATION[1], 4);
+  Serial.print(",");
+  Serial.print(imu_sensor.readFloatGyroZ() - GYRO_CALIBRATION[2], 4);
+  Serial.println("");
+  PCICR |= (1 << PCIE0); /// Enable Pin Change Interrupts
 }
 
 void setup()
@@ -161,6 +174,13 @@ void setup()
   PCMSK0 |= (1 << PCINT3); // set PCINT0 (digital pin 11) to trigger an interrupt on state change
 
   Serial.begin(115200);
+  Wire.begin();
+  delay(500);
+  if ( imu_sensor.begin() != 0 ) {
+    Serial.print(F("Failed to detect IMU\n"));
+    while (1);
+  }
+  else Serial.print(F("IMU initialized\n"));
 
   // Accelerometer Config
   imu_sensor.settings.accelEnabled = 1;
@@ -187,6 +207,15 @@ void setup()
 
 void loop()
 {
+//  if (test == 1) {
+//    inputStep();
+//    test = 0;
+//  }
+  if (receiver_input_channel_3 > UPPER_THRESHOLD)
+  {
+    inputStep();
+  }
+  
   if (millis() - last_rc_update > 25)
   {
     motor_left.writeMicroseconds(receiver_input_channel_1);
@@ -197,11 +226,6 @@ void loop()
     {
       readReceiverSignals();
       delay(250);
-    }
-
-    if (receiver_input_channel_3 > 1520)
-    {
-      inputStep();
     }
   }
 }
