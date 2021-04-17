@@ -124,14 +124,15 @@ void readReceiverSignals()
 
 void inputStep()
 {
-  long _timer_5s = micros() + 5000000;
+  long _timer_10s = micros() + 10000000;
   Serial.print(F("Begin"));
   Serial.println("");
-  while (_timer_5s > micros())
+  delay(200);
+  while (_timer_10s > micros())
   {
     /// Begin Step input
-    motor_left.writeMicroseconds(1550);
-    motor_right.writeMicroseconds(1450);
+    motor_left.writeMicroseconds(1750);
+    motor_right.writeMicroseconds(1250);
 
     /// Collect IMU data, disable pin change interrupts
     if (micros() - previousTime > TIME_STEP_MICROS)

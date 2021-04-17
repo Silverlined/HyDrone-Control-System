@@ -82,6 +82,7 @@ def collectData():
     if "Stop" in decoded_bytes:
         isSending = False
         isReady = True
+        return None
     if not "Data:" in decoded_bytes:
         return None
     values = []
