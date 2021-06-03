@@ -12,11 +12,8 @@ void PIDController_Init(PID_Controller *pid)
     pid->out = 0.0f;
 }
 
-float PIDController_Update(PID_Controller *pid, float setpoint, float measurement)
+float PIDController_Update(PID_Controller *pid, float error)
 {
-    /* Error signal */
-    float error = setpoint - measurement;
-
     /* Proportional */
     float proportional = pid->Kp * error;
 
