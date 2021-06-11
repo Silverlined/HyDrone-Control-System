@@ -58,10 +58,12 @@ uint32_t timer_channel_1, timer_channel_2, timer_channel_3, timer_channel_4;
 uint32_t last_rc_update = 0;
 Servo motor_left, motor_right, control_toggle_left, gopro_toggle_right;
 
-float theta = 0; // Orientation of the HyDrone
-float dt = 0.01;
+float orientation = 0; // Orientation of the HyDrone
+float dt = 0.01; // 100 [Hz]
+float Kp = 10;
 int dWall = 700; // [mm]
 int wallLead= 1000; // [mm]
+int speed 1600;
 
 // Interrupt service routine called evey time digital input pin 8, 9, 10, or 11 changes state
 // PCINT0_vect is the compiler vector for PCINT0 on PORTB of ATmega328
@@ -230,12 +232,12 @@ int Get_distance(int sensor_angle) {  // gets ToF sensor
 }
 
 int getOrientationError(int d90, int d45) {
-  float angle = theta * DEG_TO_RAD;
+  float angle = orientation * DEG_TO_RAD;
   float l = cos(angle) * d90;
   float p = l - dWall;
   float beta = atan2(p, wallLead);
   
-  return beta - angle;
+  return (beta - angle) * RAD_TO_DEG;
 }
 
 
@@ -289,7 +291,7 @@ void loop()
   {
     float yaw_rate = imu_sensor.readFloatGyroZ() - GYRO_CALIBRATION[2];
     if (yaw_rate < 0.06) yaw_rate = 0;
-    theta += yaw_rate * dt;
+    orientation += yaw_rate * dt;
   }
 
   if (pidTimer.check())
@@ -299,6 +301,7 @@ void loop()
     // float error = getOrientationError(distance90, distance45)
 
     // TODO: Apply PID
+
   }
   
 
