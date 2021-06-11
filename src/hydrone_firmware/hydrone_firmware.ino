@@ -1,19 +1,46 @@
 #include <Servo.h>
 #include <SparkFunLSM6DS3.h>
 #include <Wire.h>
+#include "PollTimer.h"
+
+// ToF
+#include <ComponentObject.h>
+#include <RangeSensor.h>
+#include <SparkFun_VL53L1X.h>
+#include <math.h>
+#define TCAADDR 0x70
+#define DISTANCE_45 0   // connected to serial bus 0
+#define DISTANCE_90 1
+
+PollTimer gyroTimer(100); // 100 Hz
+PollTimer pidTimer(10);
+
+SFEVL53L1X distance;
+
+int distance_val;
+int distance45;
+int distance90;
+
+void tcaselect(uint8_t i) {   // switches between different i2c busses.
+  if (i > 7) return;
+
+  Wire.beginTransmission(TCAADDR);
+  Wire.write(1 << i);
+  Wire.endTransmission();
+}
 
 #define UPPER_THRESHOLD 1520
 #define LOWER_THRESHOLD 1480
-#define PRINT_PWM 0
+#define DEBUG 0
 #define LED 13
 
-int test = 1;
+bool isRecording = false; 
 // IMU config
 LSM6DS3 imu_sensor(I2C_MODE, 0x6B);
 //const float GYRO_CALIBRATION[3] = {0, 0, 0};
 //const float ACCEL_CALIBRATION[3] = {0, 0, 0};
-const float GYRO_CALIBRATION[3] = {0.06, -0.006, -0.265};
-const float ACCEL_CALIBRATION[3] = {0.005, 0.001, 0.124};
+const float GYRO_CALIBRATION[3] = {0.12, -0.06, -0.14};
+const float ACCEL_CALIBRATION[3] = {0.0, 0.0, 0.0};
 
 uint16_t init_time;
 const uint16_t TIME_STEP_MICROS = 10000; // 10 ms period -> 100 Hz sampling rate.
@@ -30,6 +57,11 @@ uint32_t timer_channel_1, timer_channel_2, timer_channel_3, timer_channel_4;
 
 uint32_t last_rc_update = 0;
 Servo motor_left, motor_right, control_toggle_left, gopro_toggle_right;
+
+float theta = 0; // Orientation of the HyDrone
+float dt = 0.01;
+int dWall = 700; // [mm]
+int wallLead= 1000; // [mm]
 
 // Interrupt service routine called evey time digital input pin 8, 9, 10, or 11 changes state
 // PCINT0_vect is the compiler vector for PCINT0 on PORTB of ATmega328
@@ -165,6 +197,49 @@ void getData()
   PCICR |= (1 << PCIE0); /// Enable Pin Change Interrupts
 }
 
+void init_tof() 
+{
+  //Initialize ToF sensors
+  tcaselect(DISTANCE_45);
+  if (distance.begin() != 0)
+  {
+    Serial.println("Status sensor " + String(DISTANCE_45) + ":\tfailed to connect!");
+    while (1);
+  }
+  distance.setDistanceModeLong(); 
+
+  tcaselect(DISTANCE_90);
+  if (distance.begin() != 0)
+  {
+    Serial.println("Status sensor " + String(DISTANCE_90) + ":\tfailed to connect!");
+    while (1);
+  }
+  distance.setDistanceModeLong(); 
+}
+
+int Get_distance(int sensor_angle) {  // gets ToF sensor
+  tcaselect(sensor_angle);
+
+  distance.startRanging(); //Write configuration bytes to initiate measurement
+  while (!distance.checkForDataReady());
+  distance_val = distance.getDistance(); //Get the result of the measurement from the sensor
+  distance.clearInterrupt();
+  distance.stopRanging();
+
+  return distance_val;
+}
+
+int getOrientationError(int d90, int d45) {
+  float angle = theta * DEG_TO_RAD;
+  float l = cos(angle) * d90;
+  float p = l - dWall;
+  float beta = atan2(p, wallLead);
+  
+  return beta - angle;
+}
+
+
+
 void setup()
 {
   // ATmega pins default to inputs, therefore there is no need to use the pinMode function
@@ -184,11 +259,9 @@ void setup()
   else Serial.print(F("IMU initialized\n"));
 
   // Accelerometer Config
-  imu_sensor.settings.accelEnabled = 1;
-  imu_sensor.settings.accelRange = 2;        //Max G force readable.  Can be: 2, 4, 8, 16
-  imu_sensor.settings.accelSampleRate = 104; //Hz.  Can be: 13, 26, 52, 104, 208, 416, 833, 1666, 3332, 6664, 13330
-  imu_sensor.settings.accelBandWidth = 50;   //Hz.  Can be: 50, 100, 200, 400;
-  imu_sensor.settings.accelFifoEnabled = 0;
+  imu_sensor.settings.accelEnabled = 0;
+  // Temp Config
+  imu_sensor.settings.tempEnabled = 0;
 
   // Gyro Config
   imu_sensor.settings.gyroEnabled = 1;
@@ -196,25 +269,52 @@ void setup()
   imu_sensor.settings.gyroSampleRate = 104; // [Hz].  Can be: 13, 26, 52, 104, 208, 416, 833, 1666
   imu_sensor.settings.gyroFifoEnabled = 0;
 
-  // Temp
-  imu_sensor.settings.tempEnabled = 0;
 
   motor_left.attach(5, RC_min[1], RC_max[1]);
   motor_right.attach(6, RC_min[2], RC_max[2]);
 
+  //init_tof();
+
+  gyroTimer.start();
+  pidTimer.start();
   init_time = micros();
   delay(500);
 }
 
 void loop()
 {
-//  if (test == 1) {
-//    inputStep();
-//    test = 0;
-//  }
-  if (receiver_input_channel_3 > UPPER_THRESHOLD)
+
+
+  if(gyroTimer.check()) 
   {
-    inputStep();
+    float yaw_rate = imu_sensor.readFloatGyroZ() - GYRO_CALIBRATION[2];
+    if (yaw_rate < 0.06) yaw_rate = 0;
+    theta += yaw_rate * dt;
+  }
+
+  if (pidTimer.check())
+  {
+    // distance45 = Get_distance(DISTANCE_45);
+    // distance90 = Get_distance(DISTANCE_90);
+    // float error = getOrientationError(distance90, distance45)
+
+    // TODO: Apply PID
+  }
+  
+
+  if (receiver_input_channel_3 > UPPER_THRESHOLD && !isRecording)
+  {
+    //inputStep();
+    Serial.print(F("Begin"));
+    Serial.println("");
+    isRecording = true;
+    delay(200);
+  } else if (receiver_input_channel_3 < LOWER_THRESHOLD && isRecording) 
+  {
+    Serial.print(F("Stop"));
+    Serial.println("");
+    isRecording = false;
+    delay(200);
   }
   
   if (millis() - last_rc_update > 25)
@@ -223,9 +323,10 @@ void loop()
     motor_right.writeMicroseconds(receiver_input_channel_2);
     last_rc_update = millis();
 
-    if (PRINT_PWM)
+    if (DEBUG)
     {
       readReceiverSignals();
+      Serial.println("Distance 1: " + String(distance45) + "\tDistance 2: " + String(distance90));
       delay(250);
     }
   }

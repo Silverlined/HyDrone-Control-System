@@ -1,6 +1,10 @@
 #ifndef PID_CONTROLLER_H
 #define PID_CONTROLLER_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct
 {
     /* Controller gains */
@@ -30,5 +34,9 @@ typedef struct
 
 void PIDController_Init(PID_Controller *pid);
 float PIDController_Update(PID_Controller *pid, float setpoint, float measurement);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
 
 #endif
