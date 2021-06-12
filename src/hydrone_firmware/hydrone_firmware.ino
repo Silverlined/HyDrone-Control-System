@@ -17,10 +17,6 @@ PollTimer pidTimer(10);
 
 SFEVL53L1X distance;
 
-int distance_val;
-int distance45;
-int distance90;
-
 void tcaselect(uint8_t i) {   // switches between different i2c busses.
   if (i > 7) return;
 
@@ -62,7 +58,7 @@ float orientation = 0; // Orientation of the HyDrone
 float dt = 0.01; // 100 [Hz]
 float Kp = 10;
 int dWall = 700; // [mm]
-int wallLead= 1000; // [mm]
+int wallLead= 2000; // [mm]
 int speed 1600;
 
 // Interrupt service routine called evey time digital input pin 8, 9, 10, or 11 changes state
@@ -199,7 +195,7 @@ void getData()
   PCICR |= (1 << PCIE0); /// Enable Pin Change Interrupts
 }
 
-void init_tof() 
+void initDistanceSensors() 
 {
   //Initialize ToF sensors
   tcaselect(DISTANCE_45);
@@ -219,12 +215,12 @@ void init_tof()
   distance.setDistanceModeLong(); 
 }
 
-int Get_distance(int sensor_angle) {  // gets ToF sensor
-  tcaselect(sensor_angle);
+int getDistance(int sensor_id) {  // gets ToF sensor
+  tcaselect(sensor_id);
 
   distance.startRanging(); //Write configuration bytes to initiate measurement
   while (!distance.checkForDataReady());
-  distance_val = distance.getDistance(); //Get the result of the measurement from the sensor
+  int distance_val = distance.getDistance(); //Get the result of the measurement from the sensor
   distance.clearInterrupt();
   distance.stopRanging();
 
@@ -275,7 +271,7 @@ void setup()
   motor_left.attach(5, RC_min[1], RC_max[1]);
   motor_right.attach(6, RC_min[2], RC_max[2]);
 
-  //init_tof();
+  //initDistanceSensors();
 
   gyroTimer.start();
   pidTimer.start();
@@ -287,21 +283,35 @@ void loop()
 {
 
 
-  if(gyroTimer.check()) 
-  {
-    float yaw_rate = imu_sensor.readFloatGyroZ() - GYRO_CALIBRATION[2];
-    if (yaw_rate < 0.06) yaw_rate = 0;
-    orientation += yaw_rate * dt;
-  }
+  if (receiver_input_channel_4 > UPPER_THRESHOLD) {
+    if(gyroTimer.check()) 
+    {
+      float yaw_rate = imu_sensor.readFloatGyroZ() - GYRO_CALIBRATION[2];
+      if (abs(yaw_rate) > 0.06) {
+        orientation += yaw_rate * dt;
+      }
+    }
 
-  if (pidTimer.check())
-  {
-    // distance45 = Get_distance(DISTANCE_45);
-    // distance90 = Get_distance(DISTANCE_90);
-    // float error = getOrientationError(distance90, distance45)
+    if (pidTimer.check())
+    {
+      // int distance45 = getDistance(DISTANCE_45);
+      // int distance90 = getDistance(DISTANCE_90);
+      // float error = getOrientationError(distance90, distance45)
+      // if (abs(error) < 5) error = 0;
 
-    // TODO: Apply PID
-
+      // TODO: Apply PID
+      // out = Kp * error;
+      // if (out > 0) {
+      //   motor_left.writeMicroseconds(speed - out);
+      //   motor_right.writeMicroseconds(speed + out);
+      // } else if (out < 0) {
+      //   motor_left.writeMicroseconds(speed + out);
+      //   motor_right.writeMicroseconds(speed - out);
+      // } else {
+      //   motor_left.writeMicroseconds(speed);
+      //   motor_right.writeMicroseconds(speed);
+      // }
+    }
   }
   
 
