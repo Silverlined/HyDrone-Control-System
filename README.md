@@ -39,11 +39,7 @@ Assembly files are in the relevant repositoty folders.
 ```c
 PCICR |= (1 << PCIE0);   // set PCIE0 bit to to enable PCMSK0 scan
 PCMSK0 |= (1 << PCINT0); // set PCINT0 (digital pin 8) to trigger an interrupt on state change
-PCMSK0 |= (1 << PCINT1); // set PCINT0 (digital pin 9) to trigger an interrupt on state change
-PCMSK0 |= (1 << PCINT2); // set PCINT0 (digital pin 10) to trigger an interrupt on state change
-PCMSK0 |= (1 << PCINT3); // set PCINT0 (digital pin 11) to trigger an interrupt on state change
 
-// Interrupt service routine called evey time digital input pin 8, 9, 10, or 11 changes state
 // PCINT0_vect is the compiler vector for PCINT0 on PORTB of ATmega328
 ISR(PCINT0_vect)
 {
@@ -58,39 +54,7 @@ ISR(PCINT0_vect)
     last_channel_1_state = 0;
     receiver_input_channel_1 = micros() - timer_channel_1;
   }
-  // Channel 2==================================
-  if (last_channel_2_state == 0 && PINB & B00000010)
-  {
-    last_channel_2_state = 1;
-    timer_channel_2 = micros();
-  }
-  if (last_channel_2_state == 1 && !(PINB & B00000010))
-  {
-    last_channel_2_state = 0;
-    receiver_input_channel_2 = micros() - timer_channel_2;
-  }
-  //    // Channel 3==================================
-  if (last_channel_3_state == 0 && PINB & B00000100)
-  {
-    last_channel_3_state = 1;
-    timer_channel_3 = micros();
-  }
-  if (last_channel_3_state == 1 && !(PINB & B00000100))
-  {
-    last_channel_3_state = 0;
-    receiver_input_channel_3 = micros() - timer_channel_3;
-  }
-  //    // Channel 4==================================
-  if (last_channel_4_state == 0 && PINB & B00001000)
-  {
-    last_channel_4_state = 1;
-    timer_channel_4 = micros();
-  }
-  if (last_channel_4_state == 1 && !(PINB & B00001000))
-  {
-    last_channel_4_state = 0;
-    receiver_input_channel_4 = micros() - timer_channel_4;
-  }
+  ...
 }
 ```
 
@@ -107,3 +71,61 @@ ISR(PCINT0_vect)
 
 ## Control System
 
+### Heading determination system (HDS)
+
+- Microcontroller
+- IMU, 3-DoF Gyroscope
+
+Angular velocity is:
+
+`ω = Δφ/Δt = (φn − φn−1)/(tn − tn−1)`
+
+Current angle can be calculated from previous angle as:
+
+`φn = φn−1 + ω·Δt`
+
+```c
+float angle = 0;  /* or any initial value */
+while(1){
+    float omega = getAngularVelocity();
+    angle += omega * timestep;
+}
+```
+
+provided that the function `getAngularVelocity` returns a value regularly at timestep intervals. For example, 100 Hz.
+
+
+### Modelling
+Develop a simple MEMS gyro model in Python; Second-order process dead time.
+The model can be used to test out the linear control system design in a non-linear simulated environment.
+This is especially handy for tweaking control parameters without having to load software onto the embedded device and test it repeatedly physically.
+The model can also be applied to check the stability of the designed controller.
+
+### ToF sensors
+
+- I2C
+- Arduino Nano (Atmega328) has a single hardware UART. Software UART requires dedicating PCINT (pin change interrupts)
+
+### Raspberry Pi Workflow
+
+1. Install arduino-cli:
+
+```
+curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
+arduino-cli config init
+```
+
+2. Add to PATH: (edit .bashrc)
+
+```export PATH=$PATH:/home/pi/bin```
+
+3. Copy Arduino Libraries: (~/Arduino/libraries/)
+
+4. Compile & Upload
+
+```
+arduino-cli core update-index
+arduino-cli core install arduino:avr
+arduino-cli compile -b arduino:avr:nano file_path
+arduino-cli upload -p /dev/ttyACM0 -b arduino:avr:nano file_path
+```
