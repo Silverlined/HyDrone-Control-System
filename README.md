@@ -101,6 +101,18 @@ The model can be used to test out the linear control system design in a non-line
 This is especially handy for tweaking control parameters without having to load software onto the embedded device and test it repeatedly physically.
 The model can also be applied to check the stability of the designed controller.
 
+```τ2 d2ydt2 + 2ζ τ dydt + y = Kp u(t−θp)```
+
+```py
+Kp = 2.26   # Process gain
+tau = 0.17  # Time constant, normalized 0-1
+theta = -0.03  # Dead time, normalized 0-1
+zeta = 0.72    # Damping ratio
+```
+
+![step](res/step_response.png)
+
+
 ### ToF sensors
 
 - I2C
