@@ -1,3 +1,8 @@
+# Heading determination system (HDS)
+
+- Microcontroller
+- IMU, 3-DoF Gyroscope
+
 Angular velocity is:
 
 `ω = Δφ/Δt = (φn − φn−1)/(tn − tn−1)`
@@ -23,3 +28,7 @@ This is especially handy for tweaking control parameters without having to load 
 The model can also be applied to check the stability of the designed system.
 
 
+# ToF sensors
+
+- I2C
+- Arduino Nano (Atmega328) has a single hardware UART. Software UART requires dedicating PCINT (pin change interrupts)

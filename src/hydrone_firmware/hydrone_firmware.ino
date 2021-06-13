@@ -1,9 +1,10 @@
+// Libs for HyDrone Controll
 #include <Servo.h>
 #include <SparkFunLSM6DS3.h>
 #include <Wire.h>
 #include "PollTimer.h"
 
-// ToF
+// Libs for ToF sensor
 #include <ComponentObject.h>
 #include <RangeSensor.h>
 #include <SparkFun_VL53L1X.h>
@@ -12,8 +13,26 @@
 #define DISTANCE_45 0   // connected to serial bus 0
 #define DISTANCE_90 1
 
-PollTimer gyroTimer(100); // 100 Hz
-PollTimer pidTimer(10);
+// Libs for filtering
+#include <Filters.h>
+#include <AH/Timing/MillisMicrosTimer.hpp>
+#include <Filters/Butterworth.hpp>
+
+// Sampling frequency
+const float f_s_gyro = 100; // [Hz]
+const float f_s_tof = 10; // [Hz]
+// Cut-off frequency (-3 dB)
+const float f_c_gyro = 3;
+const float f_c_tof = 1;
+// Normalized cut-off frequency
+const float f_n_gyro = 2 * f_c_gyro / f_s_gyro;
+const float f_n_tof = 2 * f_c_tof / f_s_tof;
+
+auto filterGyro = butter<6>(f_n_gyro);
+auto filterToF = butter<6>(f_n_tof);
+
+PollTimer gyroTimer(100); // [Hz]
+PollTimer pidTimer(10);   // [Hz]
 
 SFEVL53L1X distance;
 
@@ -55,11 +74,12 @@ uint32_t last_rc_update = 0;
 Servo motor_left, motor_right, control_toggle_left, gopro_toggle_right;
 
 float orientation = 0; // Orientation of the HyDrone
-float dt = 0.01; // 100 [Hz]
-float Kp = 10;
-int dWall = 700; // [mm]
-int wallLead= 2000; // [mm]
-int speed 1600;
+
+const float dt = 0.01; // 100 [Hz]
+const float Kp = 10;
+const int dWall = 700; // [mm]
+const int wallLead = 2000; // [mm]
+const int speed = 1600; // [micro seconds, Pulse]
 
 // Interrupt service routine called evey time digital input pin 8, 9, 10, or 11 changes state
 // PCINT0_vect is the compiler vector for PCINT0 on PORTB of ATmega328
@@ -236,8 +256,6 @@ int getOrientationError(int d90, int d45) {
   return (beta - angle) * RAD_TO_DEG;
 }
 
-
-
 void setup()
 {
   // ATmega pins default to inputs, therefore there is no need to use the pinMode function
@@ -258,6 +276,7 @@ void setup()
 
   // Accelerometer Config
   imu_sensor.settings.accelEnabled = 0;
+
   // Temp Config
   imu_sensor.settings.tempEnabled = 0;
 
@@ -271,7 +290,7 @@ void setup()
   motor_left.attach(5, RC_min[1], RC_max[1]);
   motor_right.attach(6, RC_min[2], RC_max[2]);
 
-  //initDistanceSensors();
+  //initDistanceSensors();  // Initialize Time of Flight Sensors
 
   gyroTimer.start();
   pidTimer.start();
@@ -281,40 +300,6 @@ void setup()
 
 void loop()
 {
-
-
-  if (receiver_input_channel_4 > UPPER_THRESHOLD) {
-    if(gyroTimer.check()) 
-    {
-      float yaw_rate = imu_sensor.readFloatGyroZ() - GYRO_CALIBRATION[2];
-      if (abs(yaw_rate) > 0.06) {
-        orientation += yaw_rate * dt;
-      }
-    }
-
-    if (pidTimer.check())
-    {
-      // int distance45 = getDistance(DISTANCE_45);
-      // int distance90 = getDistance(DISTANCE_90);
-      // float error = getOrientationError(distance90, distance45)
-      // if (abs(error) < 5) error = 0;
-
-      // TODO: Apply PID
-      // out = Kp * error;
-      // if (out > 0) {
-      //   motor_left.writeMicroseconds(speed - out);
-      //   motor_right.writeMicroseconds(speed + out);
-      // } else if (out < 0) {
-      //   motor_left.writeMicroseconds(speed + out);
-      //   motor_right.writeMicroseconds(speed - out);
-      // } else {
-      //   motor_left.writeMicroseconds(speed);
-      //   motor_right.writeMicroseconds(speed);
-      // }
-    }
-  }
-  
-
   if (receiver_input_channel_3 > UPPER_THRESHOLD && !isRecording)
   {
     //inputStep();
@@ -330,6 +315,44 @@ void loop()
     delay(200);
   }
   
+  if (receiver_input_channel_4 > UPPER_THRESHOLD) {
+    if(gyroTimer.check()) 
+    {
+      float yaw_rate = imu_sensor.readFloatGyroZ() - GYRO_CALIBRATION[2];
+      yaw_rate = filterGyro(yaw_rate);
+      if (abs(yaw_rate) > 0.05) {
+        orientation += yaw_rate * dt;
+      }
+    }
+
+    if (pidTimer.check())
+    {
+      int distance45 = filterToF(getDistance(DISTANCE_45));
+      int distance90 = filterToF(getDistance(DISTANCE_90));
+ 
+      float error = getOrientationError(distance90, distance45);
+      if (abs(error) < 5) error = 0;
+
+      float out = Kp * error;
+      if (out > 0) {
+        motor_left.writeMicroseconds(speed - out);
+        motor_right.writeMicroseconds(speed + out);
+      } else if (out < 0) {
+        motor_left.writeMicroseconds(speed + out);
+        motor_right.writeMicroseconds(speed - out);
+      } else {
+        motor_left.writeMicroseconds(speed);
+        motor_right.writeMicroseconds(speed);
+      }
+      
+      if (DEBUG) {
+        Serial.println("Distance 1: " + String(distance45) + "\tDistance 2: " + String(distance90));
+      }
+    }
+    return;
+  }
+  
+  orientation = 0;
   if (millis() - last_rc_update > 25)
   {
     motor_left.writeMicroseconds(receiver_input_channel_1);
@@ -339,7 +362,6 @@ void loop()
     if (DEBUG)
     {
       readReceiverSignals();
-      Serial.println("Distance 1: " + String(distance45) + "\tDistance 2: " + String(distance90));
       delay(250);
     }
   }
