@@ -46,7 +46,7 @@ void tcaselect(uint8_t i) {   // switches between different i2c busses.
 
 #define UPPER_THRESHOLD 1520
 #define LOWER_THRESHOLD 1480
-#define DEBUG 0
+#define DEBUG 1
 #define LED 13
 
 bool isRecording = false; 
@@ -76,7 +76,7 @@ Servo motor_left, motor_right, control_toggle_left, gopro_toggle_right;
 float orientation = 0; // Orientation of the HyDrone
 
 const float dt = 0.01; // 100 [Hz]
-const float Kp = 10;
+const float Kp = 2;
 const int dWall = 700; // [mm]
 const int wallLead = 2000; // [mm]
 const int speed = 1600; // [micro seconds, Pulse]
@@ -221,7 +221,7 @@ void initDistanceSensors()
   tcaselect(DISTANCE_45);
   if (distance.begin() != 0)
   {
-    Serial.println("Status sensor " + String(DISTANCE_45) + ":\tfailed to connect!");
+    Serial.println("Failed to initialize ToF 90. Waiting...");
     while (1);
   }
   distance.setDistanceModeLong(); 
@@ -229,7 +229,7 @@ void initDistanceSensors()
   tcaselect(DISTANCE_90);
   if (distance.begin() != 0)
   {
-    Serial.println("Status sensor " + String(DISTANCE_90) + ":\tfailed to connect!");
+    Serial.println("Failed to initialize ToF45. Waiting...");
     while (1);
   }
   distance.setDistanceModeLong(); 
@@ -254,6 +254,13 @@ int getOrientationError(int d90, int d45) {
   float beta = atan2(p, wallLead);
   
   return (beta - angle) * RAD_TO_DEG;
+}
+
+int clamp(int pwm) {
+  if (pwm < 980 || pwm >2020) {
+      pwm = 1500;
+    }
+    return pwm;
 }
 
 void setup()
@@ -290,7 +297,7 @@ void setup()
   motor_left.attach(5, RC_min[1], RC_max[1]);
   motor_right.attach(6, RC_min[2], RC_max[2]);
 
-  //initDistanceSensors();  // Initialize Time of Flight Sensors
+  initDistanceSensors();  // Initialize Time of Flight Sensors
 
   gyroTimer.start();
   pidTimer.start();
@@ -322,18 +329,24 @@ void loop()
       yaw_rate = filterGyro(yaw_rate);
       if (abs(yaw_rate) > 0.05) {
         orientation += yaw_rate * dt;
+        Serial.print(F("Orientation:"));
+        Serial.println(orientation);
       }
     }
 
     if (pidTimer.check())
     {
-      int distance45 = filterToF(getDistance(DISTANCE_45));
+      int distance45 = getDistance(DISTANCE_45);
       int distance90 = filterToF(getDistance(DISTANCE_90));
  
       float error = getOrientationError(distance90, distance45);
       if (abs(error) < 5) error = 0;
+      if (error > 30) error = 30;
+      if (error < -30) error = -30;
+      
 
       float out = Kp * error;
+      Serial.println(out);
       if (out > 0) {
         motor_left.writeMicroseconds(speed - out);
         motor_right.writeMicroseconds(speed + out);
@@ -355,6 +368,8 @@ void loop()
   orientation = 0;
   if (millis() - last_rc_update > 25)
   {
+    receiver_input_channel_1 = clamp(receiver_input_channel_1);
+    receiver_input_channel_2 = clamp(receiver_input_channel_2);
     motor_left.writeMicroseconds(receiver_input_channel_1);
     motor_right.writeMicroseconds(receiver_input_channel_2);
     last_rc_update = millis();
